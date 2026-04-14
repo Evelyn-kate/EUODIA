@@ -1,0 +1,10 @@
+RewriteEngine On
+
+# 1. Map the root URL to uploads/index.php
+RewriteRule ^$ uploads/index.php [L]
+
+# 2. If a request comes in that isn't a real file or folder...
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+# ...check if it exists inside the uploads folder
+RewriteRule ^(.*)$ uploads/$1 [L]
