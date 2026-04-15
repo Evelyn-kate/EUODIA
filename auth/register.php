@@ -1,5 +1,6 @@
 <?php
 include "../includes/db.php";
+include "../includes/jwt.php";
 
 $error = '';
 $success = '';
@@ -7,7 +8,22 @@ $success = '';
 if($_POST){
   $n=$_POST['name']; $e=$_POST['email']; $p=md5($_POST['password']);
   $conn->query("INSERT INTO users(name,email,password) VALUES('$n','$e','$p')");
-  header("Location: login.php");
+  
+  // Get the user ID of the newly registered user
+  $user = $conn->query("SELECT * FROM users WHERE email='$e'")->fetch_assoc();
+  
+  if($user) {
+    $_SESSION['user'] = $user;
+    
+    // Generate JWT token for new user
+    $token = JWTHandler::createToken($user['id'], $user['email'], $user['name']);
+    
+    // Store token in session and cookie
+    $_SESSION['jwt_token'] = $token;
+    JWTHandler::setTokenCookie($token);
+    
+    header("Location: ../uploads/index.php");
+  }
 }
 ?>
 

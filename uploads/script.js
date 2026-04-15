@@ -30,7 +30,32 @@ updateCount();
 function addToCart(id){
   const qty = parseInt(document.getElementById('qty')?.value) || 1;
   
-  fetch("../api/products.php?id="+id)
+  // Get JWT token from cookie
+  const getJWTToken = () => {
+    const name = "jwt_token=";
+    const decodedCookie = decodeURIComponent(document.cookie);
+    const cookieArray = decodedCookie.split(';');
+    for(let cookie of cookieArray) {
+      cookie = cookie.trim();
+      if (cookie.indexOf(name) === 0) {
+        return cookie.substring(name.length);
+      }
+    }
+    return null;
+  };
+
+  const token = getJWTToken();
+  if (!token) {
+    alert("Please login first");
+    window.location.href = '../auth/login.php';
+    return;
+  }
+
+  fetch("../api/products.php?id="+id, {
+    headers: {
+      'Authorization': 'Bearer ' + token
+    }
+  })
   .then(r=>r.json())
   .then(p=>{
      const item = {

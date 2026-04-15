@@ -2,6 +2,7 @@
 ob_start();
 include "../includes/db.php";
 include "../includes/payunit.php";
+include "../includes/paypal.php";
 
 if(!isset($_SESSION['user'])) die("<p>Please login first.</p>");
 $cart=json_decode($_COOKIE['cart']??'[]',true);
@@ -12,19 +13,33 @@ $txid="TX".time();
 
 $redirect_url = "";
 $debug_msg = "";
+$payment_method = $_POST['payment_method'] ?? 'payunit';
 
 if(isset($_POST['process_payment'])){
-  $debug_msg = "POST received | ";
-  $pay = payunit_charge($total,$_SESSION['user']['email'],$_SESSION['user']['name'],$txid);
-  $debug_msg .= "Pay response: " . json_encode($pay) . " | ";
+  $debug_msg = "POST received | Payment Method: " . $payment_method . " | ";
   
-  if($pay && isset($pay['payment_url']) && $pay['payment_url']){
-    // Clear cart before redirect
-    setcookie("cart", "", time()-3600);
-    $redirect_url = $pay['payment_url'];
-    $debug_msg .= "Redirect URL set: " . $redirect_url;
+  if ($payment_method == 'paypal') {
+    // PayPal payment
+    $pay = PayPalHandler::createPayment($total, $_SESSION['user']['email'], $_SESSION['user']['name'], $txid);
+    $debug_msg .= "PayPal response: " . json_encode($pay) . " | ";
+    
+    if($pay && isset($pay['redirect_url']) && $pay['redirect_url']){
+      setcookie("cart", "", time()-3600);
+      $redirect_url = $pay['redirect_url'];
+      $debug_msg .= "Redirect URL set: " . $redirect_url;
+    }
   } else {
-    $debug_msg .= "No payment_url found";
+    // PayUnit payment (default)
+    $pay = payunit_charge($total,$_SESSION['user']['email'],$_SESSION['user']['name'],$txid);
+    $debug_msg .= "PayUnit response: " . json_encode($pay) . " | ";
+    
+    if($pay && isset($pay['payment_url']) && $pay['payment_url']){
+      setcookie("cart", "", time()-3600);
+      $redirect_url = $pay['payment_url'];
+      $debug_msg .= "Redirect URL set: " . $redirect_url;
+    } else {
+      $debug_msg .= "No payment_url found";
+    }
   }
 }
 
@@ -138,19 +153,42 @@ include "../includes/header.php";?>
     border: 1px solid #333;
     border-radius: 4px;
     padding: 15px;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    cursor: pointer;
+  }
+
+  .payment-method input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #d4af37;
+    margin-top: 3px;
+    flex-shrink: 0;
+  }
+
+  .payment-method label {
+    flex: 1;
+    cursor: pointer;
+    margin: 0;
   }
 
   .payment-method h4 {
     color: #d4af37;
-    margin: 0 0 10px 0;
-    font-size: 1.1em;
+    margin: 0 0 5px 0;
+    font-size: 1em;
   }
 
   .payment-method p {
     color: #999;
-    margin: 5px 0;
-    font-size: 0.9em;
+    margin: 0;
+    font-size: 0.85em;
+  }
+
+  .payment-methods-container {
+    margin-bottom: 20px;
   }
 
   .payment-btn {
@@ -241,11 +279,27 @@ include "../includes/header.php";?>
       </div>
     </div>
 
-    <!-- Payment Method -->
-    <div class="payment-method">
-      <h4>💳 Pay with Mobile Money</h4>
-      <p>Safe & secure payment via MTN MoMo or Orange Money</p>
-      <p style="font-size: 0.85em; color: #666;">Powered by PayUnit</p>
+    <!-- Payment Methods -->
+    <div class="payment-methods-container">
+      <h4 style="color: #d4af37; margin: 0 0 15px 0;">Select Payment Method:</h4>
+      
+      <!-- PayUnit Method -->
+      <div class="payment-method">
+        <input type="radio" id="method-payunit" name="payment_method" value="payunit" checked>
+        <label for="method-payunit" style="cursor: pointer; margin: 0;">
+          <h4 style="margin: 0 0 5px 0;">💳 Mobile Money</h4>
+          <p>MTN MoMo or Orange Money via PayUnit</p>
+        </label>
+      </div>
+
+      <!-- PayPal Method -->
+      <div class="payment-method">
+        <input type="radio" id="method-paypal" name="payment_method" value="paypal">
+        <label for="method-paypal" style="cursor: pointer; margin: 0;">
+          <h4 style="margin: 0 0 5px 0;">🔵 PayPal</h4>
+          <p>Pay securely with PayPal</p>
+        </label>
+      </div>
     </div>
 
     <!-- Payment Form -->

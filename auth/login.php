@@ -1,5 +1,6 @@
 <?php
 include "../includes/db.php";
+include "../includes/jwt.php";
 
 $error = '';
 
@@ -10,7 +11,16 @@ if ($_POST) {
   $q = $conn->query("SELECT * FROM users WHERE email='$email' AND password='$password'");
   
   if ($q->num_rows == 1) {
-    $_SESSION['user'] = $q->fetch_assoc();
+    $user = $q->fetch_assoc();
+    $_SESSION['user'] = $user;
+    
+    // Generate JWT token
+    $token = JWTHandler::createToken($user['id'], $user['email'], $user['name']);
+    
+    // Store token in session and cookie
+    $_SESSION['jwt_token'] = $token;
+    JWTHandler::setTokenCookie($token);
+    
     header("Location: ../uploads/index.php");
   } else {
     $error = "Invalid login";

@@ -7,18 +7,29 @@
 
 <form class="search-bar" action="search.php" method="GET">
   <input name="q" placeholder="Search perfumes...">
-  <select name="cat">
-    <option value="">All Categories</option>
-    <?php
-    $cats=$conn->query("SELECT * FROM categories");
-    while($c=$cats->fetch_assoc()) echo "<option value='{$c['id']}'>{$c['name']}</option>";
-    ?>
-  </select>
   <input name="min" type="number" placeholder="Min XAF">
   <input name="max" type="number" placeholder="Max XAF">
   <button>Search</button>
 </form>
-
+<h2 class="section-head">Browse Categories</h2>
+<div class="categories-container">
+<div class='category-card'>
+  <a href='category.php'>
+    <h3>All Categories</h3>
+  </a>
+</div>
+<?php
+$cats_all=$conn->query("SELECT id, name FROM categories");
+while($cat=$cats_all->fetch_assoc()){
+  echo "
+  <div class='category-card'>
+    <a href='category.php?id={$cat['id']}'>
+      <h3>{$cat['name']}</h3>
+    </a>
+  </div>";
+}
+?>
+</div>
 <h2 class="section-head">Our Collection</h2>
 <div class="products">
 <?php
