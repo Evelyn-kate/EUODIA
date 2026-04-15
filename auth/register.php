@@ -7,7 +7,9 @@ $success = '';
 
 if($_POST){
   $n=$_POST['name']; $e=$_POST['email']; $p=md5($_POST['password']);
-  $conn->query("INSERT INTO users(name,email,password) VALUES('$n','$e','$p')");
+
+  $hashed_password = password_hash($p, PASSWORD_ARGON2ID);
+  $conn->query("INSERT INTO users(name,email,password) VALUES('$n','$e','$hashed_password')");
   
   // Get the user ID of the newly registered user
   $user = $conn->query("SELECT * FROM users WHERE email='$e'")->fetch_assoc();

@@ -3,11 +3,26 @@ include "../includes/db.php";
 include "../includes/jwt.php";
 include "../includes/ipwhitelist.php";
 
+//session_start();
+
 // Check if user is logged in
-if (!isset($_SESSION['user'])) {
+// If the user is not logged in OR is not an admin, kick them out
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     header("Location: ../auth/login.php");
-    exit;
+    exit();
 }
+
+
+
+// Check if logged in AND if they are an admin
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+    // Not an admin? Kick them back to the home page or login
+    header("Location: ../uploads/index.php"); 
+    exit();
+}
+
+// Rest of your dashboard code follows...
+
 
 // Check IP whitelist
 $ipWhitelist = new IPWhitelist($conn);
