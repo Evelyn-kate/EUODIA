@@ -1,5 +1,8 @@
 <?php
-session_start();
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 include "../includes/db.php";
 include "../includes/jwt.php";
 
@@ -49,9 +52,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 ?>    
-      
-// Removed the loose "if ($user)" block that was causing your errors
-?>
+
 
 
 <!DOCTYPE html>
