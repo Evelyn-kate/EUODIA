@@ -1,5 +1,5 @@
 <?php
-//session_start(); // Crucial for JWT and User Sessions
+session_start();
 include "../includes/db.php";
 include "../includes/jwt.php";
 
@@ -7,64 +7,48 @@ $error = '';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = mysqli_real_escape_string($conn, $_POST['email']);
-    // Note: You are using md5 in one place and password_verify in another.
-    // I am using md5 here to match your initial query, but see security note below.
-    $password_input = $_POST['password'];
-    //$password_md5 = md5($password_input);
+    $password_input = $_POST['password']; // Plain text from user
 
-    // 1. Single query to find the user
-    $q = $conn->query("SELECT * FROM users WHERE email='$email' AND password='$hashed_password' LIMIT 1");
+    // 1. Fetch user by email only
+    $q = $conn->query("SELECT * FROM users WHERE email='$email' LIMIT 1");
     
-
-
-
     if ($q && $q->num_rows == 1) {
-        $user = $q->fetch_assoc();
-        
-      if ($user && password_verify($password_from_form, $user['password'])) {
-    // Login successful
-         if ($user['mfa_enabled']) {
-        // Zero Trust: Don't set the full session yet!
-        $_SESSION['temp_user_id'] = $user['id']; 
-        header("Location: verify_mfa.php");
-        exit();
+        $user = $q->fetch_assoc(); // $user is now defined
+
+        // 2. Verify the hash
+        if (password_verify($password_input, $user['password'])) {
+            
+            // MFA Check (Zero Trust Layer)
+            if (isset($user['mfa_enabled']) && $user['mfa_enabled'] == 1) {
+                $_SESSION['temp_user_id'] = $user['id'];
+                header("Location: verify_mfa.php");
+                exit();
+            }
+
+            // Normal Login Success
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['role'] = $user['role'];
+            
+            // Generate JWT
+            $token = JWTHandler::createToken($user['id'], $user['email'], $user['name']);
+            $_SESSION['jwt_token'] = $token;
+            
+            // Redirect based on role
+            if ($user['role'] === 'admin') {
+                header("Location: ../admin/dashboard.php");
+            } else {
+                header("Location: ../uploads/index.php");
+            }
+            exit();
+
         } else {
-        // Proceed with normal login for users without MFA
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['role'] = $user['role'];
-
-        // 2. Set Sessions
-        $_SESSION['user'] = $user;
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['role'] = $user['role'] ?? 'customer'; // Default to customer if null
-
-
-        // 3. Generate JWT token
-        $token = JWTHandler::createToken($user['id'], $user['email'], $user['name']);
-        $_SESSION['jwt_token'] = $token;
-        JWTHandler::setTokenCookie($token);
-        
-        // 4. Role-Based Redirection
-        if ($_SESSION['role'] === 'admin') {
-            header("Location: ../admin/dashboard.php");
-        } else {
-            header("Location: ../uploads/index.php");
+            $error = "Invalid email or password.";
         }
-        exit(); 
-
-     else {
-        $error = "Invalid email or password.";
-    }else {
+    } else {
         $error = "Invalid email or password.";
     }
-       
-
-
 }
-
-
-        
-        
+?>    
       
 // Removed the loose "if ($user)" block that was causing your errors
 ?>
