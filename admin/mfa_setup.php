@@ -14,6 +14,14 @@ if (!isset($_SESSION['mfa_secret_temp'])) {
 
 $secret = $_SESSION['mfa_secret_temp'];
 $userEmail = $_SESSION['user']['email'];
+
+if (!isset($_SESSION['user'])) {
+    // Zero Trust Principle: Deny by default. 
+    // If we don't know who the user is, kick them back to login.
+    header("Location: ../auth/login.php");
+    exit();
+}
+$user = $_SESSION['user'];
 $title = "EuodiaPeaceScents";
 
 // 2. Create the QR Code content (The 'otpauth' URL)

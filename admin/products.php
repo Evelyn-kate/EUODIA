@@ -19,7 +19,7 @@ if (!$ipWhitelist->checkAndLogAccess(null, 'admin_products')) {
 if ($_GET['action'] == 'delete') {
     $id = $_GET['id'];
     $conn->query("DELETE FROM products WHERE id=$id");
-    header("Location: products.php");
+    header("Location: ../api/products.php");
 }
 
 // Get all products

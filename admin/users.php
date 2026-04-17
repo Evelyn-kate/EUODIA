@@ -16,7 +16,7 @@ if (!$ipWhitelist->checkAndLogAccess(null, 'admin_users')) {
 }
 
 // Get all users
-$users = $conn->query("SELECT id, name, email, created_at FROM users ORDER BY id DESC");
+$q = $conn->query("SELECT id, name, email, role FROM users");
 ?>
 <!DOCTYPE html>
 <html lang="en">

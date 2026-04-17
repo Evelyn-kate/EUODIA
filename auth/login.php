@@ -1,43 +1,62 @@
 <?php
+/**
+ * EUODIA - Zero Trust Login System
+ * Implementation: Argon2id Hashing, JWT Session Management, and MFA Gatekeeping
+ */
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+
 include "../includes/db.php";
 include "../includes/jwt.php";
 
 $error = '';
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Sanitize input to prevent SQL Injection
     $email = mysqli_real_escape_string($conn, $_POST['email']);
-    $password_input = $_POST['password']; // Plain text from user
+    $password_input = $_POST['password']; // Plain text from the user form
 
-    // 1. Fetch user by email only
+    // 1. Fetch user by email only (Identity Lookup)
     $q = $conn->query("SELECT * FROM users WHERE email='$email' LIMIT 1");
     
     if ($q && $q->num_rows == 1) {
-        $user = $q->fetch_assoc(); // $user is now defined
+        // $user is now defined correctly from the database result
+        $user = $q->fetch_assoc(); 
 
-        // 2. Verify the hash
+        // 2. Verify the hash (Zero Trust: Always Verify Credentials)
+        // Works with password_hash($pass, PASSWORD_ARGON2ID) or Bcrypt
         if (password_verify($password_input, $user['password'])) {
             
-            // MFA Check (Zero Trust Layer)
+            // 3. Establish "Limited Trust" Session
+            // We store the user data but don't grant full dashboard access yet
+            $_SESSION['user'] = $user; 
+            $_SESSION['temp_user_id'] = $user['id'];
+
+            // 4. MFA Gatekeeping (Policy Enforcement Point)
+            // If MFA is enabled, redirect to the verification gate
             if (isset($user['mfa_enabled']) && $user['mfa_enabled'] == 1) {
-                $_SESSION['temp_user_id'] = $user['id'];
                 header("Location: verify_mfa.php");
+                exit();
+            } 
+
+            // 5. New Admin Setup Logic
+            // If an admin has no secret yet, send them to the setup page
+            if ($user['role'] === 'admin' && empty($user['mfa_secret'])) {
+                header("Location: ../admin/confirm_mfa.php");
                 exit();
             }
 
-            // Normal Login Success
+            // 6. Full Authentication Success (For users without MFA or non-admins)
+            // Generate JWT for cryptographically signed session integrity
+            $token = JWTHandler::createToken($user['id'], $user['email'], $user['name']);
+            $_SESSION['jwt_token'] = $token;
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['role'] = $user['role'];
             
-            // Generate JWT
-            $token = JWTHandler::createToken($user['id'], $user['email'], $user['name']);
-            $_SESSION['jwt_token'] = $token;
-            
-            // Redirect based on role
-            if ($user['role'] === 'admin') {
+            // 7. Context-Based Redirection
+            if ($user['is_admin'] === '1') {
                 header("Location: ../admin/dashboard.php");
             } else {
                 header("Location: ../uploads/index.php");
@@ -45,6 +64,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             exit();
 
         } else {
+            // Generic error prevents attackers from knowing if the email was correct
             $error = "Invalid email or password.";
         }
     } else {
@@ -52,8 +72,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 ?>    
-
-
 
 <!DOCTYPE html>
 <html lang="en">
@@ -188,4 +206,4 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
   </div>
 </div>
 </body>
-</html>
+</html>s
