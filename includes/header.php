@@ -6,24 +6,24 @@
 <head>
   <meta charset="UTF-8">
   <title>Euodia Scents</title>
-<link rel="stylesheet" href="/EUODIA/uploads/style.css"></head>
+<link rel="stylesheet" href="/style.css"></head>
 <body>
 <header>
   <div class="logo-wrapper">
-    <img src="/EUODIA/uploads/images/logo.png" alt="Euodia Scents Logo" class="logo-img">
-    <a href="/EUODIA/uploads/index.php" class="logo-text"></a>
+    <img src="/images/logo.png" alt="Euodia Scents Logo" class="logo-img">
+    <a href="/index.php" class="logo-text"></a>
   </div>
 
   <nav>
-    <a href="/EUODIA/uploads/index.php">Home</a>
-    <a href="/EUODIA/uploads/search.php">Shop</a>
+    <a href="/uploads/index.php">Home</a>
+    <a href="/uploads/search.php">Shop</a>
     <?php if(!empty($_SESSION['user'])): ?>
-      <a href="/EUODIA/uploads/cart.php">Cart</a>
+      <a href="/uploads/cart.php">Cart</a>
       <span class="hi">Hi, <?php echo htmlspecialchars($_SESSION['user']['name']); ?></span>
-      <a href="/EUODIA/auth/logout.php">Logout</a>
+      <a href="/auth/logout.php">Logout</a>
     <?php else: ?>
-      <a href="/EUODIA/auth/login.php">Login</a>
-      <a href="/EUODIA/auth/register.php">Register</a>
+      <a href="/auth/login.php">Login</a>
+      <a href="/auth/register.php">Register</a>
     <?php endif; ?>
   </nav>
 </header>

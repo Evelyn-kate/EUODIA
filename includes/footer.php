@@ -18,20 +18,20 @@
     <div class="footer-col">
       <h4>Quick Links</h4>
       <ul>
-        <li><a href="/euodia/index.php">Home</a></li>
-        <li><a href="/euodia/search.php">Shop</a></li>
-        <li><a href="/euodia/cart.php">Cart</a></li>
-        <li><a href="/euodia/auth/login.php">My Account</a></li>
+        <li><a href="/index.php">Home</a></li>
+        <li><a href="/search.php">Shop</a></li>
+        <li><a href="/cart.php">Cart</a></li>
+        <li><a href="/auth/login.php">My Account</a></li>
       </ul>
     </div>
 
     <div class="footer-col">
       <h4>Categories</h4>
       <ul>
-        <li><a href="/euodia/search.php?cat=1">Signature Collection</a></li>
-        <li><a href="/euodia/search.php?cat=2">Vintage Elegance</a></li>
-        <li><a href="/euodia/search.php?cat=3">Amber Essence</a></li>
-        <li><a href="/euodia/search.php?cat=4">Travel Decants</a></li>
+        <li><a href="/search.php?cat=1">Signature Collection</a></li>
+        <li><a href="/search.php?cat=2">Vintage Elegance</a></li>
+        <li><a href="/search.php?cat=3">Amber Essence</a></li>
+        <li><a href="/search.php?cat=4">Travel Decants</a></li>
       </ul>
     </div>
 
