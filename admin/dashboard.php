@@ -5,24 +5,11 @@ include "../includes/ipwhitelist.php";
 
 //session_start();
 
-// Check if user is logged in
-// If the user is not logged in OR is not an admin, kick them out
-if (!isset($_SESSION['is_admin']) || $_SESSION['is_admin'] !== '0') {
+// Check if user is logged in and if they are an admin
+if (!isset($_SESSION['is_admin']) || $_SESSION['is_admin'] != 1) {
     header("Location: ../auth/login.php");
     exit();
 }
-
-
-
-// Check if logged in AND if they are an admin
-if (!isset($_SESSION['is_admin']) || $_SESSION['is_admin'] !== '1') {
-    // Not an admin? Kick them back to the home page or login
-    header("Location: ../admin/dashboard.php"); 
-    exit();
-}
-
-// Rest of your dashboard code follows...
-
 
 // Check IP whitelist
 $ipWhitelist = new IPWhitelist($conn);

@@ -4,43 +4,100 @@ include "../includes/db.php";
 include "../includes/payunit.php";
 include "../includes/paypal.php";
 
-if(!isset($_SESSION['user'])) die("<p>Please login first.</p>");
+if(!isset($_SESSION['user'])) die("<p>Please login first.</p>");
 $cart=json_decode($_COOKIE['cart']??'[]',true);
 if(!$cart){ echo "<p>Cart empty.</p>"; include "../includes/footer.php"; exit; }
 
-$total=0; foreach($cart as $i) $total+=$i['price'];
-$txid="TX".time();
+$total=0; 
+foreach($cart as $i) $total+=$i['price'];
+
+// Get shipping countries
+$shipping_countries = $conn->query("SELECT id, country_name, country_code, currency_symbol, currency_code, shipping_fee FROM shipping_countries WHERE is_active=1 ORDER BY country_name");
+$countries = [];
+while($row = $shipping_countries->fetch_assoc()) {
+    $countries[$row['id']] = $row;
+}
+
+$shipping_fee = 0;
+$shipping_country_id = null;
+$currency_symbol = 'XAF';
+$currency_code = 'XAF';
+
+// Handle shipping country selection
+if(isset($_POST['shipping_country_id'])) {
+    $shipping_country_id = intval($_POST['shipping_country_id']);
+    if(isset($countries[$shipping_country_id])) {
+        $shipping_fee = $countries[$shipping_country_id]['shipping_fee'];
+        $currency_symbol = $countries[$shipping_country_id]['currency_symbol'];
+        $currency_code = $countries[$shipping_country_id]['currency_code'];
+    }
+}
+
+$grand_total = $total + $shipping_fee;
+$txid = "TX".time();
 
 $redirect_url = "";
 $debug_msg = "";
 $payment_method = $_POST['payment_method'] ?? 'payunit';
 
 if(isset($_POST['process_payment'])){
-  $debug_msg = "POST received | Payment Method: " . $payment_method . " | ";
-  
-  if ($payment_method == 'paypal') {
-    // PayPal payment
-    $pay = PayPalHandler::createPayment($total, $_SESSION['user']['email'], $_SESSION['user']['name'], $txid);
-    $debug_msg .= "PayPal response: " . json_encode($pay) . " | ";
-    
-    if($pay && isset($pay['redirect_url']) && $pay['redirect_url']){
-      setcookie("cart", "", time()-3600);
-      $redirect_url = $pay['redirect_url'];
-      $debug_msg .= "Redirect URL set: " . $redirect_url;
-    }
+  if (!$shipping_country_id) {
+      $debug_msg = "Please select a shipping country";
   } else {
-    // PayUnit payment (default)
-    $pay = payunit_charge($total,$_SESSION['user']['email'],$_SESSION['user']['name'],$txid);
-    $debug_msg .= "PayUnit response: " . json_encode($pay) . " | ";
-    
-    if($pay && isset($pay['payment_url']) && $pay['payment_url']){
-      setcookie("cart", "", time()-3600);
-      $redirect_url = $pay['payment_url'];
-      $debug_msg .= "Redirect URL set: " . $redirect_url;
-    } else {
-      $debug_msg .= "No payment_url found";
-    }
+      $debug_msg = "POST received | Payment Method: " . $payment_method . " | ";
+      
+      // Determine which payment method to use
+      $use_paypal = ($payment_method == 'paypal');
+      
+      if ($use_paypal) {
+        // PayPal payment
+        $pay = PayPalHandler::createPayment($grand_total, $_SESSION['user']['email'], $_SESSION['user']['name'], $txid);
+        $debug_msg .= "PayPal response: " . json_encode($pay) . " | ";
+        
+        if($pay && isset($pay['redirect_url']) && $pay['redirect_url']){
+          // Create order first
+          $conn->query("INSERT INTO orders(user_id, total, shipping_fee, shipping_country_id, grand_total, status) VALUES(".$_SESSION['user_id'].", $total, $shipping_fee, $shipping_country_id, $grand_total, 'pending')");
+          $order_id = $conn->insert_id;
+          
+          // Create shipment record
+          $tracking_number = "EUODIA-" . time() . "-" . $order_id;
+          $country_name = $conn->real_escape_string($countries[$shipping_country_id]['country_name']);
+          $estimated_delivery = date('Y-m-d H:i:s', strtotime('+7 days'));
+          $conn->query("INSERT INTO shipments(order_id, tracking_number, country_id, country_name, shipping_fee, status, estimated_delivery) VALUES($order_id, '$tracking_number', $shipping_country_id, '$country_name', $shipping_fee, 'pending', '$estimated_delivery')");
+          
+          setcookie("cart", "", time()-3600);
+          $redirect_url = $pay['redirect_url'];
+          $debug_msg .= "Redirect URL set: " . $redirect_url;
+        }
+      } else {
+        // PayUnit payment (default)
+        $pay = payunit_charge($grand_total,$_SESSION['user']['email'],$_SESSION['user']['name'],$txid);
+        $debug_msg .= "PayUnit response: " . json_encode($pay) . " | ";
+        
+        if($pay && isset($pay['payment_url']) && $pay['payment_url']){
+          // Create order first
+          $conn->query("INSERT INTO orders(user_id, total, shipping_fee, shipping_country_id, grand_total, status) VALUES(".$_SESSION['user_id'].", $total, $shipping_fee, $shipping_country_id, $grand_total, 'pending')");
+          $order_id = $conn->insert_id;
+          
+          // Create shipment record
+          $tracking_number = "EUODIA-" . time() . "-" . $order_id;
+          $country_name = $conn->real_escape_string($countries[$shipping_country_id]['country_name']);
+          $estimated_delivery = date('Y-m-d H:i:s', strtotime('+7 days'));
+          $conn->query("INSERT INTO shipments(order_id, tracking_number, country_id, country_name, shipping_fee, status, estimated_delivery) VALUES($order_id, '$tracking_number', $shipping_country_id, '$country_name', $shipping_fee, 'pending', '$estimated_delivery')");
+          
+          setcookie("cart", "", time()-3600);
+          $redirect_url = $pay['payment_url'];
+          $debug_msg .= "Redirect URL set: " . $redirect_url;
+        } else {
+          $debug_msg .= "No payment_url found";
+        }
+      }
   }
+}
+
+if($redirect_url) {
+    header("Location: " . $redirect_url);
+    exit();
 }
 
 include "../includes/header.php";?>
@@ -49,7 +106,7 @@ include "../includes/header.php";?>
 
 <style>
   .checkout-container {
-    max-width: 900px;
+    max-width: 1000px;
     margin: 40px auto;
     padding: 20px;
     display: grid;
@@ -66,11 +123,15 @@ include "../includes/header.php";?>
     text-shadow: 1px 1px 3px #000;
   }
 
-  .order-summary, .payment-section {
+  .order-summary, .payment-section, .shipping-section {
     background: #1a1a1a;
     border: 1px solid #333;
     border-radius: 8px;
     padding: 25px;
+  }
+
+  .shipping-section {
+    grid-column: 1 / -1;
   }
 
   .section-title {
@@ -103,22 +164,36 @@ include "../includes/header.php";?>
     font-weight: bold;
   }
 
-  .order-total {
+  .cost-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 2px solid #333;
+  }
+
+  .cost-row {
     display: flex;
     justify-content: space-between;
-    padding: 20px 0;
-    margin-top: 15px;
-    border-top: 2px solid #d4af37;
-    font-size: 1.3em;
+    color: #eee;
+  }
+
+  .cost-row.subtotal {
+    color: #d4af37;
+  }
+
+  .cost-row.shipping {
+    color: #888;
+  }
+
+  .cost-row.total {
+    font-size: 1.2em;
     font-weight: bold;
-  }
-
-  .total-label {
     color: #d4af37;
-  }
-
-  .total-amount {
-    color: #d4af37;
+    border-top: 1px solid #333;
+    padding-top: 10px;
+    margin-top: 10px;
   }
 
   .user-info {
@@ -146,6 +221,36 @@ include "../includes/header.php";?>
   .info-value {
     color: #d4af37;
     font-weight: bold;
+  }
+
+  .form-group {
+    margin-bottom: 20px;
+  }
+
+  .form-group label {
+    display: block;
+    color: #d4af37;
+    margin-bottom: 8px;
+    font-weight: bold;
+  }
+
+  .form-group select {
+    width: 100%;
+    padding: 12px;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 4px;
+    color: #eee;
+    font-size: 1em;
+  }
+
+  .form-group select:focus {
+    outline: none;
+    border-color: #d4af37;
+  }
+
+  .country-option {
+    color: #eee;
   }
 
   .payment-method {
@@ -204,10 +309,15 @@ include "../includes/header.php";?>
     transition: all 0.3s ease;
   }
 
-  .payment-btn:hover {
+  .payment-btn:hover:not(:disabled) {
     opacity: 0.8;
     transform: translateY(-2px);
     box-shadow: 0 5px 15px rgba(212, 175, 55, 0.3);
+  }
+
+  .payment-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .back-link {
@@ -226,6 +336,15 @@ include "../includes/header.php";?>
     text-decoration: underline;
   }
 
+  .warning-msg {
+    background: #3a1a1a;
+    border: 1px solid #662222;
+    color: #ff6b6b;
+    padding: 12px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+  }
+
   @media (max-width: 768px) {
     .checkout-container {
       grid-template-columns: 1fr;
@@ -242,20 +361,60 @@ include "../includes/header.php";?>
 <div class="checkout-container">
   <h1 class="checkout-title">Checkout</h1>
 
+  <!-- Shipping Information -->
+  <div class="shipping-section">
+    <h2 class="section-title">🌍 Shipping Information</h2>
+    
+    <form method="POST" action="checkout.php" id="shippingForm">
+      <div class="form-group">
+        <label for="shipping_country">Select Shipping Country:</label>
+        <select name="shipping_country_id" id="shipping_country" onchange="updateShipping()" required>
+          <option value="">-- Choose a country --</option>
+          <?php foreach($countries as $id => $country): ?>
+            <option value="<?php echo $id; ?>" <?php echo ($shipping_country_id == $id ? 'selected' : ''); ?>>
+              <?php echo htmlspecialchars($country['country_name']); ?> - <?php echo htmlspecialchars($country['currency_symbol']); ?> <?php echo number_format($country['shipping_fee']); ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+    </form>
+
+    <?php if(!$shipping_country_id && isset($_POST['payment_method'])): ?>
+      <div class="warning-msg">⚠️ Please select a shipping country before proceeding to payment.</div>
+    <?php endif; ?>
+  </div>
+
   <!-- Order Summary -->
   <div class="order-summary">
     <h2 class="section-title">Order Summary</h2>
     
     <?php foreach($cart as $index => $item): ?>
       <div class="order-item">
-        <span class="item-info"><?php echo $item['name']; ?></span>
-        <span class="item-cost"><?php echo $item['price']; ?> XAF</span>
+        <span class="item-info"><?php echo htmlspecialchars($item['name']); ?></span>
+        <span class="item-cost"><?php echo number_format($item['price']); ?> <?php echo $currency_code; ?></span>
       </div>
     <?php endforeach; ?>
 
-    <div class="order-total">
-      <span class="total-label">Total:</span>
-      <span class="total-amount"><?php echo $total; ?> XAF</span>
+    <div class="cost-breakdown">
+      <div class="cost-row subtotal">
+        <span>Subtotal:</span>
+        <span><?php echo number_format($total); ?> XAF</span>
+      </div>
+      <?php if($shipping_country_id): ?>
+        <div class="cost-row shipping">
+          <span>Shipping to <?php echo htmlspecialchars($countries[$shipping_country_id]['country_name']); ?>:</span>
+          <span><?php echo number_format($shipping_fee); ?> <?php echo $currency_symbol; ?></span>
+        </div>
+        <div class="cost-row total">
+          <span>Grand Total:</span>
+          <span><?php echo number_format($grand_total); ?> <?php echo $currency_symbol; ?></span>
+        </div>
+      <?php else: ?>
+        <div class="cost-row shipping" style="color: #999;">
+          <span>Shipping:</span>
+          <span>-- Select country --</span>
+        </div>
+      <?php endif; ?>
     </div>
   </div>
 
@@ -304,8 +463,12 @@ include "../includes/header.php";?>
 
     <!-- Payment Form -->
     <form method="POST" action="checkout.php">
+      <input type="hidden" name="payment_method" id="paymentMethodInput" value="payunit">
+      <input type="hidden" name="shipping_country_id" value="<?php echo $shipping_country_id; ?>">
       <input type="hidden" name="process_payment" value="1">
-      <button type="submit" class="payment-btn">Proceed to Payment</button>
+      <button type="submit" class="payment-btn" <?php echo ($shipping_country_id ? '' : 'disabled'); ?>>
+        <?php echo ($shipping_country_id ? 'Proceed to Payment' : 'Select Country to Continue'); ?>
+      </button>
     </form>
   </div>
 
@@ -314,17 +477,34 @@ include "../includes/header.php";?>
   </div>
 </div>
 
-<?php 
-if($redirect_url) {
-  echo "<script>
-    console.log('Page loaded, redirecting to: " . addslashes($redirect_url) . "');
-    localStorage.removeItem('cart');
-    document.cookie = 'cart=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-    setTimeout(function() {
-      window.location.href = '" . addslashes($redirect_url) . "';
-    }, 1000);
-  </script>";
-}
-?>
+<script>
+  // Update shipping form and payment button
+  function updateShipping() {
+    const select = document.getElementById('shipping_country');
+    const btn = document.querySelector('.payment-btn');
+    const form = document.querySelector('form[action="checkout.php"]');
+    
+    if(select.value) {
+      btn.disabled = false;
+      btn.textContent = 'Proceed to Payment';
+      form.submit();
+    } else {
+      btn.disabled = true;
+      btn.textContent = 'Select Country to Continue';
+    }
+  }
 
-<?php include "../includes/footer.php"; ?>
+  // Update payment method input
+  document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      document.getElementById('paymentMethodInput').value = e.target.value;
+    });
+  });
+</script>
+
+<?php 
+if($debug_msg) {
+  error_log("Checkout Debug: " . $debug_msg);
+}
+include "../includes/footer.php"; 
+?>

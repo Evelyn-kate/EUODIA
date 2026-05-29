@@ -5,26 +5,45 @@ include "../includes/jwt.php";
 $error = '';
 $success = '';
 
-if($_POST){
-  $n=$_POST['name']; $e=$_POST['email']; $p=md5($_POST['password']);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $n = $conn->real_escape_string(trim($_POST['name'] ?? ''));
+  $e = $conn->real_escape_string(trim($_POST['email'] ?? ''));
+  $password = $_POST['password'] ?? '';
+  $confirm_password = $_POST['confirm_password'] ?? '';
 
-  $hashed_password = password_hash($p, PASSWORD_ARGON2ID);
-  $conn->query("INSERT INTO users(name,email,password) VALUES('$n','$e','$hashed_password')");
-  
-  // Get the user ID of the newly registered user
-  $user = $conn->query("SELECT * FROM users WHERE email='$e'")->fetch_assoc();
-  
-  if($user) {
-    $_SESSION['user'] = $user;
-    
-    // Generate JWT token for new user
-    $token = JWTHandler::createToken($user['id'], $user['email'], $user['name']);
-    
-    // Store token in session and cookie
-    $_SESSION['jwt_token'] = $token;
-    JWTHandler::setTokenCookie($token);
-    
-    header("Location: ../uploads/index.php");
+  if ($password !== $confirm_password) {
+      $error = 'Passwords do not match.';
+  } elseif (empty($n) || empty($e) || empty($password)) {
+      $error = 'Please fill in all required fields.';
+  } else {
+      // Check if email already exists
+      $check = $conn->query("SELECT id FROM users WHERE email='$e' LIMIT 1");
+      if ($check && $check->num_rows > 0) {
+          $error = 'Email address already registered. Please use a different email or login.';
+      } else {
+          $hashed_password = password_hash($password, PASSWORD_ARGON2ID);
+          $conn->query("INSERT INTO users(name,email,password) VALUES('$n','$e','$hashed_password')");
+
+          // Get the user ID of the newly registered user
+          $user = $conn->query("SELECT * FROM users WHERE email='$e'")->fetch_assoc();
+
+          if ($user) {
+              $_SESSION['user'] = $user;
+              $_SESSION['user_id'] = $user['id'];
+              $_SESSION['role'] = $user['role'];
+              $_SESSION['is_admin'] = $user['is_admin'];
+
+              // Generate JWT token for new user
+              $token = JWTHandler::createToken($user['id'], $user['email'], $user['name']);
+
+              // Store token in session and cookie
+              $_SESSION['jwt_token'] = $token;
+              JWTHandler::setTokenCookie($token);
+
+              header("Location: ../uploads/index.php");
+              exit();
+          }
+      }
   }
 }
 ?>

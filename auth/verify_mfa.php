@@ -1,7 +1,7 @@
 <?php
 session_start();
-require_once '../db_connect.php'; // Adjust path if needed
-require_once '../phpqrcode/GoogleAuthenticator.php';
+include "../includes/db.php";
+require_once '../includes/GoogleAuthenticator.php';
 
 $ga = new PHPGangsta_GoogleAuthenticator();
 

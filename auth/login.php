@@ -26,25 +26,47 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $user = $q->fetch_assoc(); 
 
         // 2. Verify the hash (Zero Trust: Always Verify Credentials)
-        // Works with password_hash($pass, PASSWORD_ARGON2ID) or Bcrypt
+        $passwordVerified = false;
+        $needsRehash = false;
+
         if (password_verify($password_input, $user['password'])) {
-            
+            $passwordVerified = true;
+            if (password_needs_rehash($user['password'], PASSWORD_ARGON2ID)) {
+                $needsRehash = true;
+            }
+        } elseif (password_verify(md5($password_input), $user['password'])) {
+            $passwordVerified = true;
+            $needsRehash = true;
+        } elseif (preg_match('/^[a-f0-9]{32}$/i', $user['password']) && hash_equals($user['password'], md5($password_input))) {
+            $passwordVerified = true;
+            $needsRehash = true;
+        }
+
+        if ($passwordVerified) {
+            if ($needsRehash) {
+                $newHash = password_hash($password_input, PASSWORD_ARGON2ID);
+                $conn->query("UPDATE users SET password='$newHash' WHERE id=" . intval($user['id']));
+            }
+
             // 3. Establish "Limited Trust" Session
             // We store the user data but don't grant full dashboard access yet
-            $_SESSION['user'] = $user; 
+            $_SESSION['user'] = $user;
             $_SESSION['temp_user_id'] = $user['id'];
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['role'] = $user['role'];
+            $_SESSION['is_admin'] = $user['is_admin'];
 
             // 4. MFA Gatekeeping (Policy Enforcement Point)
             // If MFA is enabled, redirect to the verification gate
             if (isset($user['mfa_enabled']) && $user['mfa_enabled'] == 1) {
                 header("Location: verify_mfa.php");
                 exit();
-            } 
+            }
 
             // 5. New Admin Setup Logic
             // If an admin has no secret yet, send them to the setup page
             if ($user['role'] === 'admin' && empty($user['mfa_secret'])) {
-                header("Location: ../admin/confirm_mfa.php");
+                header("Location: ../admin/mfa_setup.php");
                 exit();
             }
 
@@ -52,17 +74,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Generate JWT for cryptographically signed session integrity
             $token = JWTHandler::createToken($user['id'], $user['email'], $user['name']);
             $_SESSION['jwt_token'] = $token;
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['role'] = $user['role'];
             
             // 7. Context-Based Redirection
-            if ($user['is_admin'] === '1') {
+            if ($user['is_admin'] == 1) {
                 header("Location: ../admin/dashboard.php");
             } else {
                 header("Location: ../uploads/index.php");
             }
             exit();
-
         } else {
             // Generic error prevents attackers from knowing if the email was correct
             $error = "Invalid email or password.";
