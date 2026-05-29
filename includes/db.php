@@ -9,7 +9,8 @@ if (session_status() === PHP_SESSION_NONE) {
 // Check if the connection is HTTPS (Cloudflare sends this header)
 $protocol = (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') ? 'https://' : 'http://';
 
-// Define the Base URL for the project
-$base_url = $protocol . $_SERVER['HTTP_HOST'] . '/'; 
+// Define the Base URL for the project, with CLI fallback.
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$base_url = $protocol . $host . '/';
 define('SITE_URL', $base_url);
 ?>

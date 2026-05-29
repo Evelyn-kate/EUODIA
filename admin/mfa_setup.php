@@ -13,7 +13,6 @@ if (!isset($_SESSION['mfa_secret_temp'])) {
 }
 
 $secret = $_SESSION['mfa_secret_temp'];
-$userEmail = $_SESSION['user']['email'];
 
 if (!isset($_SESSION['user'])) {
     // Zero Trust Principle: Deny by default. 
@@ -21,26 +20,25 @@ if (!isset($_SESSION['user'])) {
     header("Location: ../auth/login.php");
     exit();
 }
+
 $user = $_SESSION['user'];
+$userEmail = $user['email'];
 $title = "EuodiaPeaceScents";
 
 // 2. Create the QR Code content (The 'otpauth' URL)
 $qrCodeUrl = $ga->getQRCodeGoogleUrl($userEmail, $secret, $title);
 
-// 3. Save QR code to a local temporary file to avoid external API calls
-$tempDir = "../uploads/qrcodes/";
-if (!file_exists($tempDir)) { mkdir($tempDir); }
-$fileName = 'mfa_' . md5($userEmail) . '.png';
-$pngAbsoluteFilePath = $tempDir . $fileName;
-
-QRcode::png($qrCodeUrl, $pngAbsoluteFilePath, QR_ECLEVEL_L, 4);
+// We will embed the external QR image directly rather than generating
+// a local QR that would encode the API URL. This ensures the QR
+// encodes the OTP URI and the manual secret is displayed for copy.
+// Example: <img src="$qrCodeUrl" />
 ?>
 
 <div class="mfa-container">
     <h2>Secure Your Account</h2>
     <p>Scan this QR code with your Authenticator App:</p>
     
-    <img src="<?php echo $pngAbsoluteFilePath; ?>" alt="MFA QR Code">
+    <img src="<?php echo htmlspecialchars($qrCodeUrl); ?>" alt="MFA QR Code">
     
     <div class="manual-entry">
         <p>Or enter this code manually: <strong><?php echo $secret; ?></strong></p>
