@@ -1,6 +1,12 @@
 {
     "require": {
         "firebase/php-jwt": "^7.0",
-        "kz370/jwt-auth": "^1.0"
-    }
+        "kz370/jwt-auth": "^1.0",
+        "lbuchs/webauthn": "^2.2",
+        "web-auth/webauthn-lib": "*"
+    },
+    
+    "minimum-stability": "dev",
+    "prefer-stable": true
+
 }

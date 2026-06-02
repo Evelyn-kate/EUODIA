@@ -40,6 +40,10 @@ class ComposerStaticInit20fad51902f91e7fd3039e016a6556b5
         array (
             'voku\\' => 5,
         ),
+        'l' =>
+        array (
+            'lbuchs\\WebAuthn\\' => 16,
+        ),
         'T' =>
         array (
             'Termwind\\' => 9,
@@ -143,6 +147,10 @@ class ComposerStaticInit20fad51902f91e7fd3039e016a6556b5
         'voku\\' =>
         array (
             0 => __DIR__ . '/..' . '/voku/portable-ascii/src/voku',
+        ),
+        'lbuchs\\WebAuthn\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/lbuchs/webauthn/src',
         ),
         'Termwind\\' =>
         array (

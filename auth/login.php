@@ -11,6 +11,10 @@ if (session_status() === PHP_SESSION_NONE) {
 include "../includes/db.php";
 include "../includes/jwt.php";
 
+require_once '../includes/db.php';
+require_once '../includes/jwt_utils.php';
+
+
 $error = '';
 
 function get_user_ga_secret(int $userId, PDO $conn) {
@@ -107,9 +111,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 
-
-require_once '../includes/db.php';
-require_once '../includes/jwt_utils.php';
 
 // Initialize JWT Manager
 $jwt_manager = new JWTManager($pdo, $jwt_secret);
@@ -216,6 +217,19 @@ if ($mfa_required && (isset($_POST['mfa_code']) || isset($input['mfa_code']))) {
         exit;
     }
 }
+
+
+
+// In your login.php, when creating the access token:
+$device_fingerprint = JWTManager::generateDeviceFingerprint();
+
+// Create token with device binding
+$access_token = $jwt_manager->createAccessToken($user['id'], $device_fingerprint);
+
+// Store device info in session for audit
+$_SESSION['device_hash'] = $device_fingerprint;
+$_SESSION['device_registered_at'] = time();
+
 
 // ============================================
 // ZERO TRUST TOKEN GENERATION (THE NEW CODE)

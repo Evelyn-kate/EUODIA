@@ -16,24 +16,7 @@ class JWTManager {
         $this->secret_key = $secret_key;
     }
     
-    /**
-     * Create access token (short-lived)
-     */
-    public function createAccessToken(int $user_id, string $device_fingerprint): string {
-        $issued_at = time();
-        $jti = bin2hex(random_bytes(32)); // Unique JWT ID for blacklisting
-        
-        $payload = [
-            'iat' => $issued_at,           // Issued at
-            'exp' => $issued_at + $this->access_token_ttl, // Expires in 15 min
-            'nbf' => $issued_at,           // Not before (immediately valid)
-            'sub' => $user_id,             // Subject (user ID)
-            'jti' => $jti,                 // JWT ID (for blacklist)
-            'device' => $device_fingerprint // Device binding
-        ];
-        
-        return JWT::encode($payload, $this->secret_key, $this->algorithm);
-    }
+   
     
     /**
      * Create refresh token (long-lived, stored in DB)
@@ -146,17 +129,7 @@ public function validateAccessToken(string $token): ?object {
         $stmt->execute([$jti]);
         return $stmt->fetch() !== false;
     }
-    
-    /**
-     * Generate device fingerprint for binding
-     */
-    public static function generateDeviceFingerprint(): string {
-        $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
-        $accept_language = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '';
-        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
-        
-        return hash('sha256', $user_agent . $accept_language . $ip);
-    }
+
 /**
  * Create a temporary MFA token (expires in 5 minutes)
  */
@@ -173,6 +146,138 @@ public function createTempMFAToken(int $user_id, string $device_fingerprint): st
     ];
     
     return JWT::encode($payload, $this->secret_key, $this->algorithm);
+}
+
+
+/**
+ * Create access token WITH device binding
+ * This is the core of Zero Trust - token is tied to specific device
+ */
+public function createAccessToken(int $user_id, ?string $device_fingerprint = null): string {
+    $issued_at = time();
+    $jti = bin2hex(random_bytes(32));
+    
+    // Get device fingerprint if not provided
+    if ($device_fingerprint === null) {
+        $device_fingerprint = self::generateDeviceFingerprint();
+    }
+    
+    // Also get device ID if you have registered devices
+    $device_id = $this->getDeviceId($user_id, $device_fingerprint);
+    
+    $payload = [
+        'iat' => $issued_at,                    // Issued at
+        'exp' => $issued_at + $this->access_token_ttl, // 15 minutes
+        'nbf' => $issued_at,                    // Not before
+        'sub' => $user_id,                      // Subject (user ID)
+        'jti' => $jti,                          // JWT ID (for blacklist)
+        'device_hash' => $device_fingerprint,   // DEVICE BINDING - KEY FIELD
+        'device_id' => $device_id,              // Registered device ID (optional)
+        'session_id' => session_id()            // PHP session ID for extra binding
+    ];
+    
+    return JWT::encode($payload, $this->secret_key, $this->algorithm);
+}
+
+/**
+ * Get or create device ID for a user-device pair
+ * This allows tracking devices over time
+ */
+private function getDeviceId(int $user_id, string $device_fingerprint): ?int {
+    try {
+        // Check if device already registered
+        $stmt = $this->db->prepare("
+            SELECT id FROM user_devices 
+            WHERE user_id = ? AND device_hash = ?
+        ");
+        $stmt->execute([$user_id, $device_fingerprint]);
+        $device = $stmt->fetch();
+        
+        if ($device) {
+            // Update last seen timestamp
+            $stmt = $this->db->prepare("
+                UPDATE user_devices 
+                SET last_seen = NOW(), ip_address = ? 
+                WHERE id = ?
+            ");
+            $stmt->execute([$_SERVER['REMOTE_ADDR'] ?? '', $device['id']]);
+            return $device['id'];
+        }
+        
+        // Register new device
+        $stmt = $this->db->prepare("
+            INSERT INTO user_devices (user_id, device_hash, first_seen, last_seen, ip_address)
+            VALUES (?, ?, NOW(), NOW(), ?)
+        ");
+        $stmt->execute([$user_id, $device_fingerprint, $_SERVER['REMOTE_ADDR'] ?? '']);
+        return $this->db->lastInsertId();
+        
+    } catch (PDOException $e) {
+        // Log error but don't break authentication
+        error_log("Device tracking error: " . $e->getMessage());
+        return null;
+    }
+}
+
+
+/**
+ * Generate a unique device fingerprint from available data
+ * The more data points, the stronger the binding
+ */
+public static function generateDeviceFingerprint(): string {
+    // Core data that's hard for attackers to spoof completely
+    $fingerprint_data = [
+        // HTTP headers (present in every request)
+        'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? '',
+        'accept_language' => $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '',
+        'accept_encoding' => $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '',
+        
+        // Network hints (available in modern browsers)
+        'platform' => $_SERVER['HTTP_SEC_CH_UA_PLATFORM'] ?? '',
+        'mobile' => $_SERVER['HTTP_SEC_CH_UA_MOBILE'] ?? '',
+        
+        // IP network (use /24 subnet for privacy but still binding)
+        'ip_subnet' => self::getIpSubnet($_SERVER['REMOTE_ADDR'] ?? ''),
+        
+        // Session identifier (rotates but provides additional entropy)
+        'session_id' => session_id() ?: ''
+    ];
+    
+    // Create a hash that's deterministic but hard to reverse
+    return hash('sha256', implode('|', $fingerprint_data));
+}
+
+/**
+ * Get IP subnet (/24 for IPv4, /64 for IPv6)
+ * This provides location binding without exact IP tracking
+ */
+private static function getIpSubnet(string $ip): string {
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        // For IPv4, use /24 subnet (first 3 octets)
+        return preg_replace('/\.\d+$/', '.0', $ip);
+    } elseif (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+        // For IPv6, use /64 subnet (first 4 groups)
+        $parts = explode(':', $ip);
+        return implode(':', array_slice($parts, 0, 4)) . '::/64';
+    }
+    return 'unknown';
+}
+
+/**
+ * Enhanced fingerprint with JavaScript-collected data (optional)
+ * Call this from frontend and send via header
+ */
+public static function generateEnhancedFingerprint(array $js_data = []): string {
+    $core_data = [
+        self::generateDeviceFingerprint(),
+        $js_data['screen_resolution'] ?? '',
+        $js_data['timezone'] ?? '',
+        $js_data['canvas_hash'] ?? '',  // Canvas fingerprinting
+        $js_data['webgl_vendor'] ?? '',
+        $js_data['audio_hash'] ?? ''
+    ];
+    
+    return hash('sha256', implode('|', $core_data));
 }
 
 }
