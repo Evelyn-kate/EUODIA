@@ -15,8 +15,8 @@ if (!$ipWhitelist->checkAndLogAccess(null, 'admin_users')) {
     die('Access Denied: Your IP address is not whitelisted.');
 }
 
-// Get all users
-$q = $conn->query("SELECT id, name, email, role FROM users");
+// Get all users (include created_at and store result in $users)
+$users = $conn->query("SELECT id, name, email, role, created_at FROM users");
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -200,7 +200,7 @@ $q = $conn->query("SELECT id, name, email, role FROM users");
                             </tr>
                         </thead>
                         <tbody>
-                            <?php if ($users->num_rows > 0): ?>
+                            <?php if (isset($users) && $users && $users->num_rows > 0):  ?>
                                 <?php while ($user = $users->fetch_assoc()): ?>
                                     <tr>
                                         <td>#<?php echo $user['id']; ?></td>

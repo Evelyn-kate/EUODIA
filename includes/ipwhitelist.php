@@ -5,10 +5,11 @@
  */
 
 class IPWhitelist {
-    private $conn;
+    /** @var \mysqli */
+    private \mysqli $conn;
     private $table = 'ip_whitelist';
     
-    public function __construct($database) {
+    public function __construct(\mysqli $database) {
         $this->conn = $database;
     }
     
@@ -38,7 +39,7 @@ class IPWhitelist {
     /**
      * Check if IP is whitelisted
      */
-    public function isIPWhitelisted($ip = null) {
+    public function isIPWhitelisted(?string $ip = null) {
         if (!$ip) {
             $ip = self::getClientIP();
         }
@@ -70,7 +71,7 @@ class IPWhitelist {
     /**
      * Add IP to whitelist
      */
-    public function addIP($ip, $description = '') {
+    public function addIP(string $ip, string $description = '') {
         // Validate IP
         if (!filter_var($ip, FILTER_VALIDATE_IP)) {
             return ['success' => false, 'message' => 'Invalid IP address'];
@@ -99,8 +100,7 @@ class IPWhitelist {
     /**
      * Remove IP from whitelist
      */
-    public function removeIP($id) {
-        $id = intval($id);
+    public function removeIP(int $id) {
         $query = "DELETE FROM " . $this->table . " WHERE id = $id";
         
         if ($this->conn->query($query)) {
@@ -113,8 +113,7 @@ class IPWhitelist {
     /**
      * Toggle IP status
      */
-    public function toggleIPStatus($id) {
-        $id = intval($id);
+    public function toggleIPStatus(int $id) {
         $query = "UPDATE " . $this->table . " SET status = IF(status = 'active', 'inactive', 'active') WHERE id = $id";
         
         if ($this->conn->query($query)) {
@@ -127,7 +126,7 @@ class IPWhitelist {
     /**
      * Enable/Disable whitelist globally
      */
-    public function setWhitelistEnabled($enabled) {
+    public function setWhitelistEnabled(bool $enabled) {
         $value = $enabled ? '1' : '0';
         
         $check = $this->conn->query("SELECT id FROM settings WHERE key_name = 'ip_whitelist_enabled'");
@@ -159,7 +158,7 @@ class IPWhitelist {
      * Check IP access and log unauthorized attempts
      * Returns: true if allowed, false if blocked
      */
-    public function checkAndLogAccess($ip = null, $page = '') {
+    public function checkAndLogAccess(?string $ip = null, string $page = '') {
         if (!$ip) {
             $ip = self::getClientIP();
         }
@@ -183,7 +182,7 @@ class IPWhitelist {
     /**
      * Log unauthorized access attempts
      */
-    private function logUnauthorizedAccess($ip, $page = '') {
+    private function logUnauthorizedAccess(string $ip, string $page = '') {
         $ip_escaped = $this->conn->real_escape_string($ip);
         $page_escaped = $this->conn->real_escape_string($page);
         $user_agent = $this->conn->real_escape_string($_SERVER['HTTP_USER_AGENT'] ?? '');
@@ -205,8 +204,7 @@ class IPWhitelist {
     /**
      * Update IP description
      */
-    public function updateIPDescription($id, $description) {
-        $id = intval($id);
+    public function updateIPDescription(int $id, string $description) {
         $description = $this->conn->real_escape_string($description);
         $query = "UPDATE " . $this->table . " SET description = '$description' WHERE id = $id";
         

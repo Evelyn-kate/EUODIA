@@ -1,6 +1,7 @@
 <?php
 session_start();
 include "../includes/db.php";
+include "../includes/jwt.php";
 require_once "../includes/GoogleAuthenticator.php";
 
 $ga = new PHPGangsta_GoogleAuthenticator();
@@ -18,11 +19,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     if ($checkResult) {
         // SUCCESS: Now set the full session and JWT
+        $_SESSION['user'] = $user;
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['role'] = $user['role'];
+        $_SESSION['is_admin'] = $user['is_admin'];
         unset($_SESSION['temp_user_id']); // Clear the temporary session
+
+        $tokens = JWTHandler::createTokenPair($user['id'], $user['email'], $user['name']);
+        $_SESSION['jwt_token'] = $tokens['access_token'];
+        JWTHandler::setTokenCookies($tokens['access_token'], $tokens['refresh_token']);
+        JWTHandler::storeRefreshToken($tokens['refresh_token'], $user['id'], $conn);
         
-        header("Location: ../admin/dashboard.php");
+        if ($user['is_admin'] == 1) {
+            header("Location: ../admin/dashboard.php");
+        } else {
+            header("Location: ../uploads/index.php");
+        }
         exit();
     } else {
         $error = "Invalid verification code.";

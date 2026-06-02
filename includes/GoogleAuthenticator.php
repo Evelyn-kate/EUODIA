@@ -121,25 +121,7 @@ class PHPGangsta_GoogleAuthenticator
      *
      * @return bool
      */
-    public function verifyCode($secret, $code, $discrepancy = 1, $currentTimeSlice = null)
-    {
-        if ($currentTimeSlice === null) {
-            $currentTimeSlice = floor(time() / 30);
-        }
-
-        if (strlen($code) != 6) {
-            return false;
-        }
-
-        for ($i = -$discrepancy; $i <= $discrepancy; ++$i) {
-            $calculatedCode = $this->getCode($secret, $currentTimeSlice + $i);
-            if ($this->timingSafeEquals($calculatedCode, $code)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+   
 
     /**
      * Set the code length, should be >=6.
@@ -162,7 +144,7 @@ class PHPGangsta_GoogleAuthenticator
      *
      * @return bool|string
      */
-    protected function _base32Decode($secret)
+    public function verifyCode(string $secret, $code, $discrepancy = 1)
     {
         if (empty($secret)) {
             return '';
@@ -247,5 +229,53 @@ class PHPGangsta_GoogleAuthenticator
 
         // They are only identical strings if $result is exactly 0...
         return $result === 0;
+    }
+    /**
+     * Helper class to decode base32
+     *
+     * @param string $secret
+     * @return string|bool
+     */
+    protected function _base32Decode($secret)
+    {
+        if (empty($secret)) {
+            return '';
+        }
+
+        $base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+        $base32charsFlipped = array_flip(str_split($base32chars));
+
+        $paddingCharCount = substr_count($secret, '=');
+        $allowedPaddingCounts = array(6, 4, 3, 1, 0);
+        if (!in_array($paddingCharCount, $allowedPaddingCounts)) {
+            return false;
+        }
+
+        for ($i = 0; $i < 4; ++$i) {
+            if ($paddingCharCount == $allowedPaddingCounts[$i] &&
+                substr($secret, -$allowedPaddingCounts[$i]) != str_repeat('=', $allowedPaddingCounts[$i])) {
+                return false;
+            }
+        }
+
+        $secret = str_replace('=', '', $secret);
+        $secret = str_split($secret);
+        $binaryString = '';
+
+        for ($i = 0; $i < count($secret); $i = $i + 8) {
+            $x = '';
+            if (!in_array($secret[$i], str_split($base32chars))) {
+                return false;
+            }
+            for ($j = 0; $j < 8; ++$j) {
+                $x .= str_pad(base_convert($base32charsFlipped[$secret[$i + $j] ?? ''], 10, 2), 5, '0', STR_PAD_LEFT);
+            }
+            $eightBits = str_split($x, 8);
+            for ($z = 0; $z < count($eightBits); ++$z) {
+                $binaryString .= (($y = chr(base_convert($eightBits[$z], 2, 10))) || ord($y) == 48) ? $y : '';
+            }
+        }
+
+        return $binaryString;
     }
 }

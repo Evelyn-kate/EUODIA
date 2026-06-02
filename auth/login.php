@@ -71,10 +71,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
 
             // 6. Full Authentication Success (For users without MFA or non-admins)
-            // Generate JWT for cryptographically signed session integrity
-            $token = JWTHandler::createToken($user['id'], $user['email'], $user['name']);
-            $_SESSION['jwt_token'] = $token;
-            
+            // Generate access + refresh JWT tokens
+            $tokens = JWTHandler::createTokenPair($user['id'], $user['email'], $user['name']);
+            $_SESSION['jwt_token'] = $tokens['access_token'];
+            JWTHandler::setTokenCookies($tokens['access_token'], $tokens['refresh_token']);
+            JWTHandler::storeRefreshToken($tokens['refresh_token'], $user['id'], $conn);
+
             // 7. Context-Based Redirection
             if ($user['is_admin'] == 1) {
                 header("Location: ../admin/dashboard.php");
@@ -225,4 +227,4 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
   </div>
 </div>
 </body>
-</html>s
+</html>

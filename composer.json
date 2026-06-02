@@ -1,5 +1,6 @@
 {
     "require": {
-        "firebase/php-jwt": "*"
+        "firebase/php-jwt": "^7.0",
+        "kz370/jwt-auth": "^1.0"
     }
 }

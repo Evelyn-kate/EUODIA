@@ -16,12 +16,12 @@ if (!$ipWhitelist->checkAndLogAccess(null, 'admin_products')) {
 }
 
 // Handle product actions
-if ($_GET['action'] == 'delete') {
-    $id = $_GET['id'];
+if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id']) && is_numeric($_GET['id'])) {
+    $id = intval($_GET['id']);
     $conn->query("DELETE FROM products WHERE id=$id");
     header("Location: ../api/products.php");
+    exit;
 }
-
 // Get all products
 $products = $conn->query("SELECT * FROM products ORDER BY id DESC");
 ?>

@@ -33,12 +33,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               $_SESSION['role'] = $user['role'];
               $_SESSION['is_admin'] = $user['is_admin'];
 
-              // Generate JWT token for new user
-              $token = JWTHandler::createToken($user['id'], $user['email'], $user['name']);
-
-              // Store token in session and cookie
-              $_SESSION['jwt_token'] = $token;
-              JWTHandler::setTokenCookie($token);
+              // Generate access + refresh JWT tokens for the new user
+              $tokens = JWTHandler::createTokenPair($user['id'], $user['email'], $user['name']);
+              $_SESSION['jwt_token'] = $tokens['access_token'];
+              JWTHandler::setTokenCookies($tokens['access_token'], $tokens['refresh_token']);
+              JWTHandler::storeRefreshToken($tokens['refresh_token'], $user['id'], $conn);
 
               header("Location: ../uploads/index.php");
               exit();
