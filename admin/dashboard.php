@@ -5,6 +5,33 @@ include "../includes/ipwhitelist.php";
 
 //session_start();
 
+// Add to top of dashboard.php, admin.php, etc.
+session_start();
+require_once '../includes/db.php';
+require_once '../includes/jwt_utils.php';
+
+// Verify session is still valid (check if token hasn't been revoked)
+if (isset($_SESSION['access_token'])) {
+    $jwt_manager = new JWTManager($pdo, $jwt_secret);
+    $decoded = $jwt_manager->validateAccessToken($_SESSION['access_token']);
+    
+    if (!$decoded) {
+        // Token expired or revoked - force re-login
+        session_destroy();
+        header('Location: login_form.php?error=session_expired');
+        exit;
+    }
+    
+    // Verify device fingerprint hasn't changed
+    $current_fingerprint = JWTManager::generateDeviceFingerprint();
+    if ($_SESSION['device_fingerprint'] !== $current_fingerprint) {
+        session_destroy();
+        header('Location: login_form.php?error=device_mismatch');
+        exit;
+    }
+}
+
+
 // Check if user is logged in and if they are an admin
 if (!isset($_SESSION['is_admin']) || $_SESSION['is_admin'] != 1) {
     header("Location: ../auth/login.php");

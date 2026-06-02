@@ -13,6 +13,20 @@ include "../includes/jwt.php";
 
 $error = '';
 
+function get_user_ga_secret(int $userId, PDO $conn) {
+    // Looks up the 2FA secret key using standard PDO methods
+    $stmt = $conn->prepare("SELECT google_authenticator_secret FROM users WHERE id = ?");
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($row) {
+        return $row['google_authenticator_secret'];
+    }
+    
+    return null; 
+}
+
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Sanitize input to prevent SQL Injection
     $email = mysqli_real_escape_string($conn, $_POST['email']);
@@ -92,6 +106,177 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $error = "Invalid email or password.";
     }
 }
+
+
+require_once '../includes/db.php';
+require_once '../includes/jwt_utils.php';
+
+// Initialize JWT Manager
+$jwt_manager = new JWTManager($pdo, $jwt_secret);
+
+// Determine request type
+$is_api_request = strpos($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') !== false 
+                  || strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false;
+
+// Get credentials from either JSON or form POST
+if ($is_api_request) {
+    // API request (JSON)
+    $input = json_decode(file_get_contents('php://input'), true);
+    $email = $input['email'] ?? '';
+    $password = $input['password'] ?? '';
+    $remember_me = $input['remember_me'] ?? false;
+} else {
+    // Traditional form POST
+    $email = $_POST['email'] ?? '';
+    $password = $_POST['password'] ?? '';
+    $remember_me = isset($_POST['remember_me']);
+}
+
+// Validate credentials
+if (empty($email) || empty($password)) {
+    if ($is_api_request) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Email and password required']);
+    } else {
+        $_SESSION['login_error'] = 'Email and password required';
+        header('Location: login_form.php');
+    }
+    exit;
+}
+
+// Query user
+$stmt = $pdo->prepare("SELECT id, email, username, password_hash, is_admin, mfa_enabled FROM users WHERE email = ?");
+$stmt->execute([$email]);
+$user = $stmt->fetch();
+
+// Verify password (using your existing password_verify)
+if (!$user || !password_verify($password, $user['password_hash'])) {
+    // Log failed attempt (optional but recommended)
+    $stmt = $pdo->prepare("INSERT INTO login_attempts (email, ip_address, success) VALUES (?, ?, 0)");
+    $stmt->execute([$email, $_SERVER['REMOTE_ADDR']]);
+    
+    if ($is_api_request) {
+        http_response_code(401);
+        echo json_encode(['error' => 'Invalid credentials']);
+    } else {
+        $_SESSION['login_error'] = 'Invalid email or password';
+        header('Location: login_form.php');
+    }
+    exit;
+}
+
+// Log successful attempt
+$stmt = $pdo->prepare("INSERT INTO login_attempts (email, ip_address, success) VALUES (?, ?, 1)");
+$stmt->execute([$email, $_SERVER['REMOTE_ADDR']]);
+
+// ============================================
+// NEW ZERO TRUST CODE - ADD THIS SECTION
+// ============================================
+
+// Generate device fingerprint for Zero Trust
+$device_fingerprint = JWTManager::generateDeviceFingerprint();
+
+// Check if MFA is required (you already have Google Authenticator)
+$mfa_required = $user['mfa_enabled'] == 1;
+
+if ($mfa_required && !isset($_POST['mfa_code']) && !isset($input['mfa_code'])) {
+    // MFA required but not provided yet
+    if ($is_api_request) {
+        echo json_encode([
+            'requires_mfa' => true,
+            'user_id' => $user['id'],
+            'temp_token' => $jwt_manager->createTempMFAToken($user['id'], $device_fingerprint)
+        ]);
+    } else {
+        // Store temp session for MFA verification
+        $_SESSION['mfa_pending_user_id'] = $user['id'];
+        $_SESSION['mfa_device_fingerprint'] = $device_fingerprint;
+        header('Location: mfa_verify.php');
+    }
+    exit;
+}
+
+// Verify MFA code if provided
+if ($mfa_required && (isset($_POST['mfa_code']) || isset($input['mfa_code']))) {
+    $mfa_code = $_POST['mfa_code'] ?? $input['mfa_code'] ?? '';
+    
+    // Verify Google Authenticator code
+    require_once 'includes/gauth.php';
+    $ga = new PHPGangsta_GoogleAuthenticator();
+    $secret = get_user_ga_secret($user['id'], $pdo);
+    
+    if (!$ga->verifyCode($secret, $mfa_code, 2)) {
+        if ($is_api_request) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid MFA code']);
+        } else {
+            $_SESSION['login_error'] = 'Invalid MFA code';
+            header('Location: login_form.php');
+        }
+        exit;
+    }
+}
+
+// ============================================
+// ZERO TRUST TOKEN GENERATION (THE NEW CODE)
+// ============================================
+
+// Create tokens
+$access_token = $jwt_manager->createAccessToken($user['id'], $device_fingerprint);
+$refresh_token = $jwt_manager->createRefreshToken($user['id']);
+
+// Store refresh token in HTTP-only cookie (more secure)
+$refresh_token_expiry = time() + (86400 * 7); // 7 days
+setcookie('refresh_token', $refresh_token, [
+    'expires' => $refresh_token_expiry,
+    'path' => '/',
+    'domain' => $_SERVER['HTTP_HOST'],
+    'secure' => true,  // Only send over HTTPS
+    'httponly' => true, // Not accessible via JavaScript
+    'samesite' => 'Strict'
+]);
+
+// ============================================
+// PRESERVE YOUR EXISTING SESSION LOGIC
+// ============================================
+
+// Keep your existing session for backward compatibility
+$_SESSION['user_id'] = $user['id'];
+$_SESSION['email'] = $user['email'];
+$_SESSION['username'] = $user['username'];
+$_SESSION['is_admin'] = $user['is_admin'];
+$_SESSION['authenticated'] = true;
+$_SESSION['device_fingerprint'] = $device_fingerprint;
+
+// Also store JWT in session for server-side validation
+$_SESSION['access_token'] = $access_token;
+
+// ============================================
+// RESPONSE BASED ON REQUEST TYPE
+// ============================================
+
+if ($is_api_request) {
+    // Return JSON with tokens for SPA/mobile apps
+    echo json_encode([
+        'success' => true,
+        'access_token' => $access_token,
+        'refresh_token' => $refresh_token,
+        'expires_in' => 900, // 15 minutes
+        'token_type' => 'Bearer',
+        'user' => [
+            'id' => $user['id'],
+            'email' => $user['email'],
+            'username' => $user['username'],
+            'is_admin' => $user['is_admin']
+        ]
+    ]);
+} else {
+    // Traditional redirect for form submission
+    $redirect_to = $_POST['redirect_to'] ?? 'dashboard.php';
+    header('Location: ' . $redirect_to);
+}
+exit;
+
 ?>    
 
 <!DOCTYPE html>
