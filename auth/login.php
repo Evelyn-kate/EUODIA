@@ -286,7 +286,7 @@ if ($is_api_request) {
     ]);
 } else {
     // Traditional redirect for form submission
-    $redirect_to = $_POST['redirect_to'] ?? 'dashboard.php';
+    $redirect_to = $_POST['redirect_to'] ?? '../admin/dashboard.php';
     header('Location: ' . $redirect_to);
 }
 exit;
@@ -418,6 +418,11 @@ exit;
       <input type="password" name="password" placeholder="Enter your password" required>
     </div>
     <button type="submit" class="btn">Sign In</button>
+    <button id="passkeyLoginBtn" class="btn btn-secondary" style="margin-top: 1rem;">
+    <i class="fas fa-fingerprint"></i> Sign in with Passkey
+</button>
+
+<div id="passkeyLoginStatus"></div>
   </form>
   <div class="links">
     <a href="register.php">Create Account</a>
@@ -426,4 +431,64 @@ exit;
   </div>
 </div>
 </body>
+
+
+<script>
+document.getElementById('passkeyLoginBtn')?.addEventListener('click', async function() {
+    const emailInput = document.getElementById('email'); // Adjust to your email field ID
+    const email = emailInput?.value;
+    
+    if (!email) {
+        alert('Please enter your email address first');
+        return;
+    }
+    
+    if (!window.PublicKeyCredential) {
+        alert('Your browser does not support passkeys. Please use Chrome, Edge, or Safari.');
+        return;
+    }
+    
+    const statusDiv = document.getElementById('passkeyLoginStatus');
+    statusDiv.innerHTML = '<div style="color: #3b82f6;">🔐 Waiting for biometric verification...</div>';
+    
+    try {
+        // Step 1: Get challenge from server
+        const startRes = await fetch('../api/passkey/login_start.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email })
+        });
+        
+        const startData = await startRes.json();
+        if (!startData.success) throw new Error(startData.error);
+        
+        // Step 2: Get credential from device (fingerprint/face ID)
+        const credential = await navigator.credentials.get({
+            publicKey: startData.options
+        });
+        
+        // Step 3: Verify with server
+        const completeRes = await fetch('../api/passkey/login_complete.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                authentication_data: JSON.stringify(credential)
+            })
+        });
+        
+        const completeData = await completeRes.json();
+        
+        if (completeData.success) {
+            statusDiv.innerHTML = '<div style="color: #10b981;">✅ Login successful! Redirecting...</div>';
+            window.location.href = completeData.redirect || '/accounts/sessions.php';
+        } else {
+            throw new Error(completeData.error);
+        }
+        
+    } catch (error) {
+        statusDiv.innerHTML = '<div style="color: #dc2626;">❌ ' + error.message + '</div>';
+        console.error('Passkey login error:', error);
+    }
+});
+</script>
 </html>
