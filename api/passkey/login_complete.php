@@ -68,17 +68,25 @@ try {
         $stmt->execute([$user_id]);
         $user = $stmt->fetch();
         
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['email'] = $user['email'];
-        $_SESSION['username'] = $user['username'];
-        $_SESSION['authenticated'] = true;
+
+        $_SESSION['user'] = [
+    'id' => $user['id'],
+    'email' => $user['email'],
+    'name' => $user['username'] ?? $user['email'],
+    'authenticated' => true
+];
+// Also keep these for backward compatibility
+$_SESSION['user_id'] = $user['id'];
+$_SESSION['authenticated'] = true;
+
+       
         
         unset($_SESSION['passkey_login_challenge']);
         unset($_SESSION['passkey_login_user_id']);
         
         echo json_encode([
             'success' => true,
-            'redirect' => '/account/dashboard.php'
+            'redirect' => '../accounts/sessions.php?login=success'
         ]);
     } else {
         throw new Exception('Authentication verification failed');

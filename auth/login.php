@@ -140,7 +140,7 @@ if (empty($email) || empty($password)) {
         echo json_encode(['error' => 'Email and password required']);
     } else {
         $_SESSION['login_error'] = 'Email and password required';
-        header('Location: login_form.php');
+        header('Location: login.php');
     }
     exit;
 }
@@ -161,7 +161,7 @@ if (!$user || !password_verify($password, $user['password_hash'])) {
         echo json_encode(['error' => 'Invalid credentials']);
     } else {
         $_SESSION['login_error'] = 'Invalid email or password';
-        header('Location: login_form.php');
+        header('Location: login.php');
     }
     exit;
 }
@@ -212,7 +212,7 @@ if ($mfa_required && (isset($_POST['mfa_code']) || isset($input['mfa_code']))) {
             echo json_encode(['error' => 'Invalid MFA code']);
         } else {
             $_SESSION['login_error'] = 'Invalid MFA code';
-            header('Location: login_form.php');
+            header('Location: login.php');
         }
         exit;
     }

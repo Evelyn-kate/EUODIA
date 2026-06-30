@@ -18,7 +18,7 @@ if (isset($_SESSION['access_token'])) {
     if (!$decoded) {
         // Token expired or revoked - force re-login
         session_destroy();
-        header('Location: login_form.php?error=session_expired');
+        header('Location: login.php?error=session_expired');
         exit;
     }
     
@@ -26,7 +26,7 @@ if (isset($_SESSION['access_token'])) {
     $current_fingerprint = JWTManager::generateDeviceFingerprint();
     if ($_SESSION['device_fingerprint'] !== $current_fingerprint) {
         session_destroy();
-        header('Location: login_form.php?error=device_mismatch');
+        header('Location: login.php?error=device_mismatch');
         exit;
     }
 }

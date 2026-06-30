@@ -156,7 +156,7 @@ $page_title = "Manage Devices";
             try {
                 statusDiv.innerHTML = '<div class="alert alert-info">⏳ Starting passkey registration...</div>';
                 
-                const response = await fetch('/api/passkey/register_start.php');
+                const response = await fetch('../api/passkey/register_start.php');
                 const data = await response.json();
                 
                 if (!data.success) throw new Error(data.error);
@@ -167,14 +167,14 @@ $page_title = "Manage Devices";
                     publicKey: data.options
                 });
                 
-                const complete = await fetch('/api/passkey/register_complete.php', {
+                const complete = await fetch('../api/passkey/register_complete.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         registration_data: JSON.stringify(credential)
                     })
                 });
-                
+                   
                 const result = await complete.json();
                 
                 if (result.success) {
@@ -195,7 +195,7 @@ $page_title = "Manage Devices";
         // ============================================
         async function loadSessions() {
             try {
-                const response = await fetch('/api/get_sessions.php', {
+                const response = await fetch('../api/get_sessions.php', {
                     headers: {
                         'Authorization': 'Bearer <?php echo $_SESSION['access_token'] ?? ''; ?>'
                     }
@@ -242,7 +242,7 @@ $page_title = "Manage Devices";
             if (!confirm('Sign out this device?')) return;
             
             try {
-                const response = await fetch('/api/revoke_session.php', {
+                const response = await fetch('../api/revoke_session.php', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
